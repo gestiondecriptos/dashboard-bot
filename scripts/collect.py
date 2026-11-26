@@ -28,12 +28,46 @@ pad = lambda a: a.lower().replace("0x", "").rjust(64, "0")
 call = lambda to, data: rpc("eth_call", [{"to": to, "data": data}, "latest"])
 
 
-def w2_value(a):
-    """USDC libre + (colateral − deuda) en Aave v3, en USD. Otros tokens fuera de Aave NO se cuentan."""
-    usdc = int(call(USDC, "0x70a08231" + pad(a)), 16) / 1e6
-    h = call(POOL, "0xbf92857c" + pad(a))[2:]                    # getUserAccountData: colateral, deuda (USD, 8 dec)
-    col, debt = int(h[0:64], 16) / 1e8, int(h[64:128], 16) / 1e8
-    return usdc + col - debt, debt
+TOK = {"USDC": (USDC, 6), "USDT": ("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", 6), "WBTC": ("0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", 8)}
+ZERO = "0x" + "0" * 40
+FLOW_COLS = ["t", "tx", "tipo", "usdc", "precio_participacion", "participaciones", "participaciones_total", "token", "cantidad"]
+SNAP_COLS = ["t", "btc_px", "w2_usd", "w3_usd", "w4_usd", "debt_usd", "nav_usd", "shares", "share_px", "btc_total", "usdc_total"]
+
+
+def bal(tok, a):
+    return int(call(tok, "0x70a08231" + pad(a)), 16)
+
+
+def w2_assets(a):
+    """Por activo (USDC, USDT, WBTC): neto = libre + aToken − deuda (variable y estable), y deuda; en unidades del token."""
+    net, debt = {}, {}
+    for s, (t, d) in TOK.items():
+        w = call(POOL, "0x35ea6a75" + pad(t))[2:]                   # getReserveData: palabras 8, 9, 10 = aToken, deuda estable, deuda variable
+        at, st, va = ("0x" + w[i * 64:(i + 1) * 64][-40:] for i in (8, 9, 10))
+        dbt = sum(bal(x, a) for x in (st, va) if x != ZERO)
+        net[s] = (bal(t, a) + bal(at, a) - dbt) / 10 ** d
+        debt[s] = dbt / 10 ** d
+    return net, debt
+
+
+def usdt_usdc():
+    """USDT valorado en USDC (Kraken). Si falla, 1.0."""
+    try:
+        r = requests.get("https://api.kraken.com/0/public/Ticker?pair=USDTUSD,USDCUSD", timeout=20).json()["result"]
+        p = {k[:4]: float(v["c"][0]) for k, v in r.items()}
+        return p["USDT"] / p["USDC"]
+    except Exception as ex:
+        print("AVISO: precio USDT/USDC no disponible, uso 1.0:", ex); return 1.0
+
+
+def ensure(path, cols):
+    """Crea el CSV o le añade columnas nuevas (conserva las filas antiguas)."""
+    rows = []
+    if os.path.exists(path):
+        if open(path).readline().strip().split(",") == cols: return
+        rows = list(csv.DictReader(open(path)))
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, cols, extrasaction="ignore"); w.writeheader(); w.writerows(rows)
 
 
 def block_at(ts, hi):
@@ -46,15 +80,16 @@ def block_at(ts, hi):
 
 
 def flows(a, b):
-    """Transferencias de USDC W1→W2 (aporte, +) y W2→W1 (retirada, −) entre los bloques a..b."""
+    """Transferencias USDC/USDT/WBTC W1→W2 (aporte, +) y W2→W1 (retirada, −) entre los bloques a..b."""
     out = []
-    for src, dst, sg in ((W1, W2, 1), (W2, W1, -1)):
-        for s in range(a, b + 1, 20000):
-            f = {"fromBlock": hex(s), "toBlock": hex(min(s + 19999, b)), "address": USDC, "topics": [TRANSFER, "0x" + pad(src), "0x" + pad(dst)]}
-            for lg in rpc("eth_getLogs", [f]):
-                ts = int(rpc("eth_getBlockByNumber", [lg["blockNumber"], False])["timestamp"], 16)
-                out.append({"key": f"{lg['transactionHash']}:{int(lg['logIndex'], 16)}", "ts": ts, "block": int(lg["blockNumber"], 16),
-                            "usdc": sg * int(lg["data"], 16) / 1e6})
+    for sym, (t, d) in TOK.items():
+        for src, dst, sg in ((W1, W2, 1), (W2, W1, -1)):
+            for x in range(a, b + 1, 20000):
+                f = {"fromBlock": hex(x), "toBlock": hex(min(x + 19999, b)), "address": t, "topics": [TRANSFER, "0x" + pad(src), "0x" + pad(dst)]}
+                for lg in rpc("eth_getLogs", [f]):
+                    ts = int(rpc("eth_getBlockByNumber", [lg["blockNumber"], False])["timestamp"], 16)
+                    out.append({"key": f"{lg['transactionHash']}:{int(lg['logIndex'], 16)}", "ts": ts, "block": int(lg["blockNumber"], 16),
+                                "tok": sym, "amt": sg * int(lg["data"], 16) / 10 ** d})
     return sorted(out, key=lambda x: (x["block"], x["key"]))
 
 
@@ -74,40 +109,43 @@ def copy_bot_state():
 def snapshot():
     if not W3: print("Falta el secret W3_ADDRESS"); return
     btc = float(hl({"type": "allMids"})["BTC"])
-    bal = {b["coin"]: float(b["total"]) for b in hl({"type": "spotClearinghouseState", "user": W3}).get("balances", [])}
-    w3 = bal.get("USDC", 0) + bal.get("UBTC", 0) * btc + float(hl({"type": "clearinghouseState", "user": W3})["marginSummary"]["accountValue"])
-    w2, debt, fo = None, 0.0, json.load(open("data/fondo.json"))
-    new_ev = []
-    if W1 and W2:                                                   # si W2 falla, el workflow falla: no se publica un NAV incompleto
-        w2, debt = w2_value(W2)
+    b3 = {b["coin"]: float(b["total"]) for b in hl({"type": "spotClearinghouseState", "user": W3}).get("balances", [])}
+    w3_usdc = b3.get("USDC", 0) + float(hl({"type": "clearinghouseState", "user": W3})["marginSummary"]["accountValue"])
+    w3_btc = b3.get("UBTC", 0)
+    k = usdt_usdc(); pr = {"USDC": 1.0, "USDT": k, "WBTC": btc}      # USDT se cuenta como USDC; WBTC como BTC
+    w2_usdc = w2_btc = debt = None; new_ev = []; fo = json.load(open("data/fondo.json"))
+    if W1 and W2:                                                     # si W2 falla, el workflow falla: no se publica un NAV incompleto
+        net, dbt = w2_assets(W2)
+        w2_usdc, w2_btc = net["USDC"] + net["USDT"] * k, net["WBTC"]
+        debt = dbt["USDC"] + dbt["USDT"] * k + dbt["WBTC"] * btc
         latest = int(rpc("eth_blockNumber", []), 16)
         start = (fo["ultimo_bloque"] + 1) if fo.get("ultimo_bloque") else block_at(int(dt.datetime.fromisoformat(fo["inicio"]).timestamp()), latest)
         done = {r["tx"] for r in csv.DictReader(open("data/flujos.csv"))} if os.path.exists("data/flujos.csv") else set()
         new_ev = [e for e in flows(start, latest) if e["key"] not in done]
+        for e in new_ev: e["usdc"] = e["amt"] * pr[e["tok"]]
         fo["ultimo_bloque"] = latest
+    w2 = None if w2_usdc is None else w2_usdc + w2_btc * btc
+    w3 = w3_usdc + w3_btc * btc
     nav = w3 + (w2 or 0)
     sh = fo["participaciones"]
-    if new_ev:                                                      # precio = NAV antes del flujo / participaciones (o precio inicial)
+    if new_ev:                                                        # precio = NAV antes del flujo / participaciones (o precio inicial)
         px = (nav - sum(e["usdc"] for e in new_ev)) / sh if sh > 0 else fo["precio_inicial"]
-        new = not os.path.exists("data/flujos.csv")
+        ensure("data/flujos.csv", FLOW_COLS)
         with open("data/flujos.csv", "a", newline="") as fh:
-            w = csv.writer(fh)
-            if new: w.writerow(["t", "tx", "tipo", "usdc", "precio_participacion", "participaciones", "participaciones_total"])
+            w = csv.DictWriter(fh, FLOW_COLS)
             for e in new_ev:
                 n = math.floor(e["usdc"] / px + 1e-9) if e["usdc"] > 0 else -min(sh, math.ceil(-e["usdc"] / px - 1e-9))
                 sh += n
-                w.writerow([dt.datetime.fromtimestamp(e["ts"], dt.timezone.utc).isoformat(), e["key"], "aporte" if n > 0 else "retirada",
-                            round(e["usdc"], 6), round(px, 6), n, sh])
+                w.writerow({"t": dt.datetime.fromtimestamp(e["ts"], dt.timezone.utc).isoformat(), "tx": e["key"], "tipo": "aporte" if n > 0 else "retirada",
+                            "usdc": round(e["usdc"], 6), "precio_participacion": round(px, 6), "participaciones": n, "participaciones_total": sh,
+                            "token": e["tok"], "cantidad": e["amt"]})
         fo["participaciones"] = sh
-    spx = round(nav / sh, 6) if sh > 0 else fo["precio_inicial"]
-    cols = ["t", "btc_px", "w2_usd", "w3_usd", "w4_usd", "debt_usd", "nav_usd", "shares", "share_px"]
-    row = {"t": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(), "btc_px": btc, "w2_usd": "" if w2 is None else round(w2, 2),
-           "w3_usd": round(w3, 2), "w4_usd": "", "debt_usd": round(debt, 2), "nav_usd": round(nav, 2), "shares": sh, "share_px": spx}
-    first = not os.path.exists("data/snapshots.csv")
-    with open("data/snapshots.csv", "a", newline="") as fh:
-        wr = csv.DictWriter(fh, cols)
-        if first: wr.writeheader()
-        wr.writerow(row)
+    r = lambda v, d=2: "" if v is None else round(v, d)
+    row = {"t": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(), "btc_px": btc, "w2_usd": r(w2), "w3_usd": r(w3), "w4_usd": "",
+           "debt_usd": r(debt), "nav_usd": r(nav), "shares": sh, "share_px": round(nav / sh, 6) if sh > 0 else fo["precio_inicial"],
+           "btc_total": round(w3_btc + (w2_btc or 0), 8), "usdc_total": round(w3_usdc + (w2_usdc or 0), 2)}
+    ensure("data/snapshots.csv", SNAP_COLS)
+    with open("data/snapshots.csv", "a", newline="") as fh: csv.DictWriter(fh, SNAP_COLS).writerow(row)
     json.dump(fo, open("data/fondo.json", "w"), indent=1)
     print(row, f"· {len(new_ev)} flujos nuevos")
 
