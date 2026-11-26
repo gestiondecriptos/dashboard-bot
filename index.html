@@ -26,7 +26,7 @@ iframe{width:100%;height:80vh;border:1px solid var(--b);border-radius:10px;backg
 <button id="cur">USD</button><span id="rng"></span></header>
 <main id="main"></main>
 <script>
-const CFG={METRICAS_URL:"https://gestiondecriptos.github.io/metricas-bitcoin/"};   // <-- URL de la web de métricas
+const CFG={METRICAS_URL:"https://TU_USUARIO.github.io/metricas-bitcoin/"};   // <-- pon aquí la URL de tu web de métricas
 const $=s=>document.querySelector(s),f=(x,d=2)=>x==null||x===""||isNaN(x)?"–":(+x).toLocaleString("es-ES",{maximumFractionDigits:d,minimumFractionDigits:d});
 function parse(t){const R=[];let r=[],c="",q=0;for(let i=0;i<t.length;i++){const h=t[i];if(q){if(h=='"'){if(t[i+1]=='"'){c+='"';i++}else q=0}else c+=h}else if(h=='"')q=1;else if(h==","){r.push(c);c=""}else if(h=="\n"){r.push(c);R.push(r);r=[];c=""}else if(h!="\r")c+=h}
 if(c||r.length){r.push(c);R.push(r)}const H=R.shift()||[];return R.filter(x=>x.length==H.length).map(x=>Object.fromEntries(H.map((k,i)=>[k,x[i]])))}
@@ -39,7 +39,7 @@ return{demo:1,S,est:{network:"mainnet",pair:"UBTC/USDC",last_cycle:{signal_date:
 ops:[{signal_date:"2026-12-01",rule:"B1_RSI+FNG",side:"BUY",status:"filled",size_usdc:45,qty:.00075,px:60600,avg_px:60010,slippage_vs_ref_hl_pct:.05,fee:3e-7},{signal_date:"2026-12-01",rule:"B4_EMA200W",side:"BUY",status:"resting",size_usdc:31.5,qty:.00053,px:59400,avg_px:"",slippage_vs_ref_hl_pct:"",fee:""}],
 fills:[{signal_date:"2026-12-01",rule:"B1_RSI+FNG",fill_n:1,fill_time_utc:"2026-12-02T00:08:11",qty:.00075,px:60010,fee:3e-7}],rules:rl}}
 async function load(){const S=await get("data/snapshots.csv");if(!S||!S.length){D=demo();return}
-D={S,est:await get("data/bot/estado_bot.json",1)||{},ops:await get("data/bot/historial_operaciones.csv")||[],fills:await get("data/bot/historial_fills.csv")||[],rules:(await get("data/bot/historial_reglas.csv")||[])};
+D={S,est:await get("data/bot/estado_bot.json",1)||{},ops:await get("data/bot/historial_operaciones.csv")||[],fills:await get("data/bot/historial_fills.csv")||[],rules:(await get("data/bot/historial_reglas.csv")||[]),flows:await get("data/flujos.csv")||[]};
 const l=D.rules.map(r=>r.signal_date).sort().pop();D.rules=D.rules.filter(r=>r.signal_date==l)}
 function tbl(rows,cols){if(!rows.length)return'<div class="card"><small>Sin datos todavía.</small></div>';
 return`<div class="card sc"><table><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>${rows.map(r=>`<tr>${cols.map(c=>{const v=r[c];const k=(c=="status"||c=="decision")&&v?`<span class="chip ${String(v).replace(/ /g,"")}">${v}</span>`:(isNaN(v)||v===""||v==null?(v??""):f(v,6).replace(/,?0+$/,""));return`<td>${k}</td>`}).join("")}</tr>`).join("")}</table></div>`}
@@ -49,7 +49,7 @@ const cards=[["NAV",cur=="USD"?"$ "+f(L.nav_usd):"₿ "+f(L.nav_usd/L.btc_px,6)]
 const ind=Object.entries(e.indicators||{}).map(([n,v])=>`<span class="chip ${v.estado}">${n}: ${f(v.valor)} · ${v.estado}</span>`).join("");
 $("#main").innerHTML=({Inicio:`<div class="grid">${cards.map(c=>`<div class="card"><small>${c[0]}</small><div class="big">${c[1]}</div></div>`).join("")}</div>
 <div class="row"><div class="card"><small>NAV (${cur})</small><div id="c1" class="ch"></div></div><div class="card"><small>Distribución por cartera</small><div id="c2" class="ch"></div></div></div>
-<h3>Estado de indicadores</h3><div class="card">${ind||"<small>Sin datos</small>"}</div>${e.last_error?`<h3>⚠️ Último error</h3><div class="card">${e.last_error.utc} · ${e.last_error.type}: ${e.last_error.msg}</div>`:""}`,
+<h3>Estado de indicadores</h3><div class="card">${ind||"<small>Sin datos</small>"}</div><h3>Aportes y retiradas (W1 ⇄ W2)</h3>${tbl((D.flows||[]).slice().reverse(),["t","tipo","usdc","precio_participacion","participaciones","participaciones_total"])}${e.last_error?`<h3>⚠️ Último error</h3><div class="card">${e.last_error.utc} · ${e.last_error.type}: ${e.last_error.msg}</div>`:""}`,
 Operaciones:`<h3>Órdenes</h3>${tbl(D.ops,["signal_date","rule","side","status","size_usdc","qty","px","avg_px","slippage_vs_ref_hl_pct","fee"])}<h3>Ejecuciones (fills)</h3>${tbl(D.fills,["signal_date","rule","fill_n","fill_time_utc","qty","px","fee"])}<p><small>CSV completos en <a style="color:#9339f4" href="data/bot/">/data/bot/</a></small></p>`,
 Reglas:`<h3>Reglas · último día evaluado</h3>${tbl(D.rules,["rule","status","detail","dist_pct","decision","reason","cooldown_rest_d"])}`,
 "Métricas":`<iframe src="${CFG.METRICAS_URL}"></iframe>`})[tab];
@@ -58,6 +58,6 @@ const c2=echarts.init($("#c2")),v=[["W2 Arbitrum/Aave",L.w2_usd],["W3 Hyperliqui
 function shell(){$("#tabs").innerHTML=["Inicio","Operaciones","Reglas","Métricas"].map(t=>`<button class="${t==tab?"on":""}" onclick="tab='${t}';shell();draw()">${t}</button>`).join("");
 $("#rng").innerHTML=[[7,"7d"],[30,"30d"],[90,"90d"],[365,"1a"],[0,"Todo"]].map(a=>`<button class="${a[0]==rng?"on":""}" onclick="rng=${a[0]};shell();draw()">${a[1]}</button>`).join(" ")}
 $("#cur").onclick=()=>{cur=cur=="USD"?"BTC":"USD";$("#cur").textContent=cur;draw()};
-load().then(()=>{const e=D.est||{},m=e.network=="mainnet";$("#net").className="badge "+(m?"net-m":"net-t");$("#net").textContent=m?"🔴 MAINNET":"🧪 "+(e.network||"TESTNET").toUpperCase();$("#pair").textContent=e.pair||"";if(D.demo)$("#demo").classList.remove("hide");shell();draw()});
+load().then(()=>{const e=D.est||{},m=!e.network||e.network=="mainnet";$("#net").className="badge "+(m?"net-m":"net-t");$("#net").textContent=m?"🔴 MAINNET":"🧪 "+e.network.toUpperCase();$("#pair").textContent=e.pair||(e.network?"":"· bot sin datos publicados (testnet)");if(D.demo)$("#demo").classList.remove("hide");shell();draw()});
 addEventListener("resize",()=>charts.forEach(c=>c.resize()));
 </script></body></html>
