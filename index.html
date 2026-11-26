@@ -26,7 +26,7 @@ iframe{width:100%;height:80vh;border:1px solid var(--b);border-radius:10px;backg
 <button id="cur">USD</button><span id="rng"></span></header>
 <main id="main"></main>
 <script>
-const CFG={METRICAS_URL:"https://TU_USUARIO.github.io/metricas-bitcoin/"};   // <-- pon aquí la URL de tu web de métricas
+const CFG={METRICAS_URL:"https://gestiondecriptos.github.io/metricas-bitcoin/"};   // <-- URL de la web de métricas
 const $=s=>document.querySelector(s),f=(x,d=2)=>x==null||x===""||isNaN(x)?"–":(+x).toLocaleString("es-ES",{maximumFractionDigits:d,minimumFractionDigits:d});
 function parse(t){const R=[];let r=[],c="",q=0;for(let i=0;i<t.length;i++){const h=t[i];if(q){if(h=='"'){if(t[i+1]=='"'){c+='"';i++}else q=0}else c+=h}else if(h=='"')q=1;else if(h==","){r.push(c);c=""}else if(h=="\n"){r.push(c);R.push(r);r=[];c=""}else if(h!="\r")c+=h}
 if(c||r.length){r.push(c);R.push(r)}const H=R.shift()||[];return R.filter(x=>x.length==H.length).map(x=>Object.fromEntries(H.map((k,i)=>[k,x[i]])))}
