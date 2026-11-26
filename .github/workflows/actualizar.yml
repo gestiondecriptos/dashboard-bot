@@ -1,0 +1,33 @@
+name: Actualizar datos del dashboard
+on:
+  schedule:
+    - cron: "17 * * * *"          # cada hora, minuto 17 (GitHub puede retrasarlo)
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: dashboard
+  cancel-in-progress: false
+jobs:
+  datos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - name: Recoger datos (solo lectura)
+        env:
+          W3_ADDRESS: ${{ secrets.W3_ADDRESS }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          BOT_REPO: ${{ vars.BOT_REPO }}
+        run: python scripts/collect.py
+      - name: Guardar datos
+        if: always()
+        run: |
+          git config user.name "dashboard"
+          git config user.email "dashboard@users.noreply.github.com"
+          git add data/ || true
+          git diff --cached --quiet || (git commit -m "datos" && git pull --rebase -q && git push)
