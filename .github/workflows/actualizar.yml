@@ -20,6 +20,8 @@ jobs:
       - run: pip install requests
       - name: Recoger datos (solo lectura)
         env:
+          W1_ADDRESS: ${{ secrets.W1_ADDRESS }}
+          W2_ADDRESS: ${{ secrets.W2_ADDRESS }}
           W3_ADDRESS: ${{ secrets.W3_ADDRESS }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           BOT_REPO: ${{ vars.BOT_REPO }}
