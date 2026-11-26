@@ -1,0 +1,63 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Bot BTC · Hyperliquid</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<style>
+:root{--bg:#11131f;--c:#1d1f31;--b:#2d3048;--t:#e6e8f2;--m:#8b90ad;--p:#9339f4;--g:#2fd08a;--r:#ef5b6b;--a:#f5b942}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--b)}
+h1{font-size:17px;margin:0 8px 0 0}.tabs{display:flex;gap:4px;flex-wrap:wrap}
+button{background:var(--c);color:var(--t);border:1px solid var(--b);border-radius:6px;padding:6px 12px;cursor:pointer}
+button.on{background:var(--p);border-color:var(--p)}main{padding:16px;max-width:1200px;margin:auto}
+.badge{padding:3px 9px;border-radius:12px;font-weight:600;font-size:12px}.net-t{background:#3a3320;color:var(--a)}.net-m{background:#3a1f26;color:var(--r)}
+.demo{background:#2a2350;color:#cdb8ff;text-align:center;padding:6px;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px}
+.card{background:var(--c);border:1px solid var(--b);border-radius:10px;padding:14px}.card small{color:var(--m)}
+.big{font-size:22px;font-weight:700;margin-top:4px}.row{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+@media(max-width:800px){.row{grid-template-columns:1fr}}.ch{height:300px}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:6px 8px;border-bottom:1px solid var(--b);text-align:left;white-space:nowrap}
+th{color:var(--m)}.sc{overflow-x:auto}.chip{display:inline-block;padding:2px 9px;border-radius:10px;font-size:12px;margin:2px}
+.Compra,.activada,.filled{background:#17402f;color:var(--g)}.Venta{background:#47202a;color:var(--r)}.Vigilar,.vigilar,.resting{background:#463a17;color:var(--a)}
+.Neutral,.nocumplida{background:#2a2d44;color:var(--m)}.error,.err,.suprimida{background:#47202a;color:var(--r)}
+iframe{width:100%;height:80vh;border:1px solid var(--b);border-radius:10px;background:#fff}.hide{display:none}h3{margin:18px 0 8px}
+</style></head><body>
+<div id="demo" class="demo hide">🧪 DATOS DE DEMOSTRACIÓN — no son reales. Se sustituyen solos cuando existan datos en /data.</div>
+<header><h1>🤖 Bot BTC · Hyperliquid</h1><span id="net" class="badge"></span><span id="pair" style="color:var(--m)"></span>
+<div class="tabs" id="tabs"></div><span style="flex:1"></span>
+<button id="cur">USD</button><span id="rng"></span></header>
+<main id="main"></main>
+<script>
+const CFG={METRICAS_URL:"https://TU_USUARIO.github.io/metricas-bitcoin/"};   // <-- pon aquí la URL de tu web de métricas
+const $=s=>document.querySelector(s),f=(x,d=2)=>x==null||x===""||isNaN(x)?"–":(+x).toLocaleString("es-ES",{maximumFractionDigits:d,minimumFractionDigits:d});
+function parse(t){const R=[];let r=[],c="",q=0;for(let i=0;i<t.length;i++){const h=t[i];if(q){if(h=='"'){if(t[i+1]=='"'){c+='"';i++}else q=0}else c+=h}else if(h=='"')q=1;else if(h==","){r.push(c);c=""}else if(h=="\n"){r.push(c);R.push(r);r=[];c=""}else if(h!="\r")c+=h}
+if(c||r.length){r.push(c);R.push(r)}const H=R.shift()||[];return R.filter(x=>x.length==H.length).map(x=>Object.fromEntries(H.map((k,i)=>[k,x[i]])))}
+const get=async(u,j)=>{try{const r=await fetch(u+"?"+Date.now());if(!r.ok)return null;return j?await r.json():parse(await r.text())}catch(e){return null}};
+let D={},tab="Inicio",cur="USD",rng=90,charts=[];
+function demo(){const S=[];let btc=60000,sh=1000,nav=1000;const n=Date.now();for(let i=300;i>=0;i--){btc*=1+Math.sin(i/9)*0.012+0.001;nav=nav*1+(btc/60000-1)*3+2;S.push({t:new Date(n-i*864e5).toISOString(),btc_px:btc,w2_usd:null,w3_usd:nav*.55,w4_usd:null,nav_usd:nav*.55,shares:1000,share_px:nav*.55/1000})}
+const ind={"RSI-14":{valor:24.9,estado:"Compra"},"Fear & Greed":{valor:11,estado:"Compra"},"MVRV":{valor:1.15,estado:"Vigilar"},"Cierre / EMA-200W":{valor:.86,estado:"Compra"}};
+const rl=[["B1_RSI+FNG","activada","RSI 24.9 · F&G 11",-17,"filled",""],["B2_RSI","no aplica","B1 ya activa",-17,"",""],["B3_MVRV","vigilar","MVRV 1.15 (<1.1)",4.5,"",""],["B4_EMA200W","activada","cierre vs EMA",-14,"resting",""],["B5_SIN_COMPRAS","no cumplida","1 d sin operar",96,"",""],["B6_CAIDA_ULT_COMPRA","no cumplida","sin compras previas",null,"",""],["S1_FNG","no cumplida","F&G 11 (>80)",86,"",""],["S3_MVRV","no cumplida","MVRV 1.15 (>2.4)",52,"",""],["S4_EMA200W","no cumplida","cierre vs 2×EMA",57,"",""]].map(a=>({signal_date:"2026-12-01",rule:a[0],status:a[1],detail:a[2],dist_pct:a[3],decision:a[4],reason:a[5],cooldown_rest_d:0}));
+return{demo:1,S,est:{network:"mainnet",pair:"UBTC/USDC",last_cycle:{signal_date:"2026-12-01",cron_delay_min:42,ok:true,n_orders:2},balances:{usdc_free:412.3,base_free:.0061},indicators:ind,last_error:null,updated_utc:new Date().toISOString()},
+ops:[{signal_date:"2026-12-01",rule:"B1_RSI+FNG",side:"BUY",status:"filled",size_usdc:45,qty:.00075,px:60600,avg_px:60010,slippage_vs_ref_hl_pct:.05,fee:3e-7},{signal_date:"2026-12-01",rule:"B4_EMA200W",side:"BUY",status:"resting",size_usdc:31.5,qty:.00053,px:59400,avg_px:"",slippage_vs_ref_hl_pct:"",fee:""}],
+fills:[{signal_date:"2026-12-01",rule:"B1_RSI+FNG",fill_n:1,fill_time_utc:"2026-12-02T00:08:11",qty:.00075,px:60010,fee:3e-7}],rules:rl}}
+async function load(){const S=await get("data/snapshots.csv");if(!S||!S.length){D=demo();return}
+D={S,est:await get("data/bot/estado_bot.json",1)||{},ops:await get("data/bot/historial_operaciones.csv")||[],fills:await get("data/bot/historial_fills.csv")||[],rules:(await get("data/bot/historial_reglas.csv")||[])};
+const l=D.rules.map(r=>r.signal_date).sort().pop();D.rules=D.rules.filter(r=>r.signal_date==l)}
+function tbl(rows,cols){if(!rows.length)return'<div class="card"><small>Sin datos todavía.</small></div>';
+return`<div class="card sc"><table><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>${rows.map(r=>`<tr>${cols.map(c=>{const v=r[c];const k=(c=="status"||c=="decision")&&v?`<span class="chip ${String(v).replace(/ /g,"")}">${v}</span>`:(isNaN(v)||v===""||v==null?(v??""):f(v,6).replace(/,?0+$/,""));return`<td>${k}</td>`}).join("")}</tr>`).join("")}</table></div>`}
+function series(){const m=cur=="USD"?1:0,cut=rng?Date.now()-rng*864e5:0;return D.S.filter(s=>+new Date(s.t)>=cut).map(s=>[s.t,cur=="USD"?+s.nav_usd:+s.nav_usd/+s.btc_px,+s.share_px])}
+function draw(){charts.forEach(c=>c.dispose());charts=[];const L=D.S[D.S.length-1],e=D.est||{},k=e.last_cycle||{};const ser=series(),sp=cur=="USD"?1:null;
+const cards=[["NAV",cur=="USD"?"$ "+f(L.nav_usd):"₿ "+f(L.nav_usd/L.btc_px,6)],["Precio participación",L.share_px?"$ "+f(L.share_px,4):"pendiente"],["Participaciones",L.shares?f(L.shares,0):"pendiente"],["BTC (precio)","$ "+f(L.btc_px,0)],["W3 · USDC libre",f(e.balances?.usdc_free)],["W3 · BTC libre",f(e.balances?.base_free,6)],["Último ciclo",k.signal_date?k.signal_date+(k.ok?" ✅":" ⚠️"):"–"],["Retraso cron",k.cron_delay_min!=null?f(k.cron_delay_min,0)+" min":"–"]];
+const ind=Object.entries(e.indicators||{}).map(([n,v])=>`<span class="chip ${v.estado}">${n}: ${f(v.valor)} · ${v.estado}</span>`).join("");
+$("#main").innerHTML=({Inicio:`<div class="grid">${cards.map(c=>`<div class="card"><small>${c[0]}</small><div class="big">${c[1]}</div></div>`).join("")}</div>
+<div class="row"><div class="card"><small>NAV (${cur})</small><div id="c1" class="ch"></div></div><div class="card"><small>Distribución por cartera</small><div id="c2" class="ch"></div></div></div>
+<h3>Estado de indicadores</h3><div class="card">${ind||"<small>Sin datos</small>"}</div>${e.last_error?`<h3>⚠️ Último error</h3><div class="card">${e.last_error.utc} · ${e.last_error.type}: ${e.last_error.msg}</div>`:""}`,
+Operaciones:`<h3>Órdenes</h3>${tbl(D.ops,["signal_date","rule","side","status","size_usdc","qty","px","avg_px","slippage_vs_ref_hl_pct","fee"])}<h3>Ejecuciones (fills)</h3>${tbl(D.fills,["signal_date","rule","fill_n","fill_time_utc","qty","px","fee"])}<p><small>CSV completos en <a style="color:#9339f4" href="data/bot/">/data/bot/</a></small></p>`,
+Reglas:`<h3>Reglas · último día evaluado</h3>${tbl(D.rules,["rule","status","detail","dist_pct","decision","reason","cooldown_rest_d"])}`,
+"Métricas":`<iframe src="${CFG.METRICAS_URL}"></iframe>`})[tab];
+if(tab=="Inicio"){const c1=echarts.init($("#c1"));c1.setOption({grid:{left:55,right:15,top:15,bottom:30},xAxis:{type:"category",data:ser.map(s=>s[0].slice(0,10))},yAxis:{type:"value",scale:true},tooltip:{trigger:"axis"},series:[{type:"line",data:ser.map(s=>s[1]),showSymbol:false,color:"#9339f4",areaStyle:{opacity:.15}}]});
+const c2=echarts.init($("#c2")),v=[["W2 Arbitrum/Aave",L.w2_usd],["W3 Hyperliquid",L.w3_usd],["W4 Bitcoin",L.w4_usd]];c2.setOption({tooltip:{},series:[{type:"pie",radius:["45%","70%"],label:{color:"#e6e8f2"},data:v.map(a=>({name:a[0]+(a[1]===""||a[1]==null?" (pendiente)":""),value:+a[1]||0}))}]});charts=[c1,c2]}}
+function shell(){$("#tabs").innerHTML=["Inicio","Operaciones","Reglas","Métricas"].map(t=>`<button class="${t==tab?"on":""}" onclick="tab='${t}';shell();draw()">${t}</button>`).join("");
+$("#rng").innerHTML=[[7,"7d"],[30,"30d"],[90,"90d"],[365,"1a"],[0,"Todo"]].map(a=>`<button class="${a[0]==rng?"on":""}" onclick="rng=${a[0]};shell();draw()">${a[1]}</button>`).join(" ")}
+$("#cur").onclick=()=>{cur=cur=="USD"?"BTC":"USD";$("#cur").textContent=cur;draw()};
+load().then(()=>{const e=D.est||{},m=e.network=="mainnet";$("#net").className="badge "+(m?"net-m":"net-t");$("#net").textContent=m?"🔴 MAINNET":"🧪 "+(e.network||"TESTNET").toUpperCase();$("#pair").textContent=e.pair||"";if(D.demo)$("#demo").classList.remove("hide");shell();draw()});
+addEventListener("resize",()=>charts.forEach(c=>c.resize()));
+</script></body></html>
