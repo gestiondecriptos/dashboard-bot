@@ -1,1 +1,2 @@
 signal_date,rule,side,oid,fill_n,fill_time_utc,qty,px,notional_usdc,fee,fee_token,fee_usdc,qty_acumulada,qty_orden
+2026-11-26,B1_RSI+FNG,BUY,618011265957,1,2026-11-27T14:34:26.260000,0.00074,60700.0,44.918,2.841e-07,UBTC,0.01724487,0.00074,0.00074
