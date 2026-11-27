@@ -10,6 +10,7 @@ POOL = "0x794a61358D6845594F94dc1DB02A252b5b4814aD"      # Aave v3 Pool en Arbit
 TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 E = lambda k: (os.environ.get(k) or "").strip()
 W1, W2, W3, BOT_REPO, TOKEN = E("W1_ADDRESS"), E("W2_ADDRESS"), E("W3_ADDRESS"), E("BOT_REPO"), E("BOT_TOKEN")
+STATE_DIR = E("STATE_DIR") or "state/mainnet"      # carpeta del estado del bot en su repo
 FILES = ["estado_bot.json", "historial_operaciones.csv", "historial_fills.csv", "historial_reglas.csv", "indicadores_diarios.csv"]
 os.makedirs("data/bot", exist_ok=True)
 
@@ -98,7 +99,7 @@ def copy_bot_state():
     h = {"Authorization": f"Bearer {TOKEN}", "Accept": "application/vnd.github.raw+json"}
     got = {}
     for f in FILES:
-        r = requests.get(f"https://api.github.com/repos/{BOT_REPO}/contents/state/{f}", headers=h, timeout=30)
+        r = requests.get(f"https://api.github.com/repos/{BOT_REPO}/contents/{STATE_DIR}/{f}", headers=h, timeout=30)
         if r.status_code == 200: got[f] = r.content
     st = json.loads(got["estado_bot.json"]) if "estado_bot.json" in got else {}
     if st.get("network") != "mainnet" and E("ALLOW_TESTNET") != "1":
