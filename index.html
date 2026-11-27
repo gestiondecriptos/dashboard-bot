@@ -26,7 +26,7 @@ iframe{width:100%;height:80vh;border:1px solid var(--b);border-radius:10px;backg
 <button id="cur">USD</button><span id="rng"></span></header>
 <main id="main"></main>
 <script>
-const CFG={METRICAS_URL:"https://gestiondecriptos.github.io/metricas-bitcoin/"};   // <-- URL de la web de métricas
+const CFG={METRICAS_URL:"https://gestiondecriptos.github.io/metricas-bitcoin/"};   // <-- aquí la URL de métricas
 const $=s=>document.querySelector(s),f=(x,d=2)=>x==null||x===""||isNaN(x)?"–":(+x).toLocaleString("es-ES",{maximumFractionDigits:d,minimumFractionDigits:d});
 function parse(t){const R=[];let r=[],c="",q=0;for(let i=0;i<t.length;i++){const h=t[i];if(q){if(h=='"'){if(t[i+1]=='"'){c+='"';i++}else q=0}else c+=h}else if(h=='"')q=1;else if(h==","){r.push(c);c=""}else if(h=="\n"){r.push(c);R.push(r);r=[];c=""}else if(h!="\r")c+=h}
 if(c||r.length){r.push(c);R.push(r)}const H=R.shift()||[];return R.filter(x=>x.length==H.length).map(x=>Object.fromEntries(H.map((k,i)=>[k,x[i]])))}
@@ -46,8 +46,8 @@ fills:[{signal_date:"2026-12-01",rule:"B1_RSI+FNG",fill_n:1,fill_time_utc:"2026-
 async function load(){const S=await get("data/snapshots.csv");if(!S||!S.length){D=demo();return}
 D={S,est:await get("data/bot/estado_bot.json",1)||{},ops:await get("data/bot/historial_operaciones.csv")||[],fills:await get("data/bot/historial_fills.csv")||[],rules:(await get("data/bot/historial_reglas.csv")||[]),flows:await get("data/flujos.csv")||[],acc:await get("data/accionistas.json",1)||{}};
 const l=D.rules.map(r=>r.signal_date).sort().pop();D.rules=D.rules.filter(r=>r.signal_date==l)}
-function tbl(rows,cols){if(!rows.length)return'<div class="card"><small>Sin datos todavía.</small></div>';
-return`<div class="card sc"><table><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>${rows.map(r=>`<tr>${cols.map(c=>{const v=r[c];const k=(c=="status"||c=="decision")&&v?`<span class="chip ${String(v).replace(/ /g,"")}">${v}</span>`:(isNaN(v)||v===""||v==null?(v??""):f(v,6).replace(/,?0+$/,""));return`<td>${k}</td>`}).join("")}</tr>`).join("")}</table></div>`}
+function tbl(rows,cols,names,fmt){if(!rows.length)return'<div class="card"><small>Sin datos todavía.</small></div>';
+return`<div class="card sc"><table><tr>${cols.map((c,i)=>`<th>${names?names[i]:c}</th>`).join("")}</tr>${rows.map(r=>`<tr>${cols.map(c=>{const v=r[c];const k=fmt&&fmt[c]?fmt[c](v,r):(c=="status"||c=="decision")&&v?`<span class="chip ${String(v).replace(/ /g,"")}">${v}</span>`:(isNaN(v)||v===""||v==null?(v??""):f(v,6).replace(/,?0+$/,""));return`<td>${k}</td>`}).join("")}</tr>`).join("")}</table></div>`}
 function series(){const m=cur=="USD"?1:0,cut=rng?Date.now()-rng*864e5:0;return D.S.filter(s=>+new Date(s.t)>=cut&&+s.share_px>0).map(s=>[s.t,cur=="USD"?+s.nav_usd:+s.nav_usd/+s.btc_px,+s.share_px])}
 function draw(){charts.forEach(c=>c.dispose());charts=[];const L=D.S[D.S.length-1],e=D.est||{},k=e.last_cycle||{};const ser=series(),sp=cur=="USD"?1:null;
 const cards=[["NAV",cur=="USD"?"$ "+f(L.nav_usd):"₿ "+f(L.nav_usd/L.btc_px,6)],["Precio participación",L.share_px?"$ "+f(L.share_px,4):"pendiente"],["Participaciones",L.shares?f(L.shares,0):"pendiente"],["BTC (precio)","$ "+f(L.btc_px,0)],["BTC total (W2+W3)",f(L.btc_total,6)],["USDC total (equiv.)",f(L.usdc_total)],["Deuda Aave","$ "+f(L.debt_usd)],["Último ciclo",k.signal_date?k.signal_date+(k.ok?" ✅":" ⚠️"):"–"],["Retraso cron",k.cron_delay_min!=null?f(k.cron_delay_min,0)+" min":"–"]];
@@ -55,12 +55,15 @@ const ind=Object.entries(e.indicators||{}).map(([n,v])=>`<span class="chip ${v.e
 $("#main").innerHTML=({Inicio:`<div class="grid">${cards.map(c=>`<div class="card"><small>${c[0]}</small><div class="big">${c[1]}</div></div>`).join("")}</div>
 <div class="row"><div class="card"><small>NAV (${cur})</small><div id="c1" class="ch"></div></div><div class="card"><small>Distribución por cartera</small><div id="c2" class="ch"></div></div></div>
 <h3>Estado de indicadores</h3><div class="card">${ind||"<small>Sin datos</small>"}</div><h3>Aportes y retiradas (W1 ⇄ W2)</h3>${tbl((D.flows||[]).slice().reverse(),["t","tipo","usdc","precio_participacion","participaciones","participaciones_total"])}${e.last_error?`<h3>⚠️ Último error</h3><div class="card">${e.last_error.utc} · ${e.last_error.type}: ${e.last_error.msg}</div>`:""}`,
-Operaciones:`<h3>Órdenes</h3>${tbl(D.ops,["signal_date","rule","side","status","size_usdc","qty","px","avg_px","slippage_vs_ref_hl_pct","fee"])}<h3>Ejecuciones (fills)</h3>${tbl(D.fills,["signal_date","rule","fill_n","fill_time_utc","qty","px","fee"])}<p><small>CSV completos en <a style="color:#9339f4" href="data/bot/">/data/bot/</a></small></p>`,
-Rendimiento:rend(),Accionistas:accT(),Reglas:`<h3>Reglas · último día evaluado</h3>${tbl(D.rules,["rule","status","detail","dist_pct","decision","reason","cooldown_rest_d"])}`,
+Operaciones:`<h3>Órdenes</h3>${tbl(D.ops,["signal_date","rule","side","status","size_usdc","qty","px","avg_px","slippage_vs_ref_hl_pct","fee"],["Fecha","Regla","Tipo","Estado","USDC","BTC","Precio","Precio Medio","Slippage","Comisión"])}<h3>Ejecuciones (fills)</h3>${tbl(D.fills,["signal_date","rule","fill_n","fill_time_utc","qty","px","fee"])}<p><small>CSV completos en <a style="color:#9339f4" href="data/bot/">/data/bot/</a></small></p>`,
+Rendimiento:rend(),Accionistas:accT(),Reglas:`<h3>Reglas · último día evaluado</h3>${tbl(D.rules,["rule","status","detail","dist_pct","decision","reason","cooldown_rest_d"],["Regla","Estado","Detalle","Distancia %","Decisión","Motivo","Cooldown (d)"],RF)}`,
 "Métricas":`<iframe src="${CFG.METRICAS_URL}"></iframe>`})[tab];
 if(tab=="Inicio"){const c1=echarts.init($("#c1"));c1.setOption({grid:{left:55,right:15,top:15,bottom:30},xAxis:{type:"category",data:ser.map(s=>s[0].slice(0,10))},yAxis:{type:"value",scale:true},tooltip:{trigger:"axis"},series:[{type:"line",data:ser.map(s=>s[1]),showSymbol:false,color:"#9339f4",areaStyle:{opacity:.15}}]});
 const c2=echarts.init($("#c2")),v=[["W2 Arbitrum/Aave",L.w2_usd],["W3 Hyperliquid",L.w3_usd],["W4 Bitcoin",L.w4_usd]];c2.setOption({tooltip:{},series:[{type:"pie",radius:["45%","70%"],label:{color:"#e6e8f2"},data:v.map(a=>({name:a[0]+(a[1]===""||a[1]==null?" (pendiente)":""),value:+a[1]||0}))}]});charts=[c1,c2]}if(tab=="Rendimiento")chartR();if(tab=="Accionistas")chartA()}
 
+const esc=s=>String(s).replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])),
+num=t=>String(t).replace(/-?\d+\.\d+/g,m=>(+m).toLocaleString("es-ES",{maximumFractionDigits:2})),
+RF={detail:v=>v?esc(num(v)):"",dist_pct:v=>v===""||v==null||isNaN(v)?"":f(v,1)+" %",reason:v=>{if(!v)return"";const t=num(v);return`<span title="${esc(t)}">${esc(t.length>60?t.slice(0,57)+"…":t)}</span>`}};
 const mean=v=>v.reduce((p,c)=>p+c,0)/v.length,sd=v=>{const m=mean(v);return Math.sqrt(v.reduce((p,c)=>p+(c-m)**2,0)/(v.length-1))};
 function daily(){const m={};D.S.forEach(s=>m[s.t.slice(0,10)]=s);return Object.values(m)}
 function stats(){const d=daily().filter(s=>+s.share_px>0);if(d.length<31)return null;const r=[],a=[];
@@ -80,7 +83,7 @@ function rend(){const s=stats(),d=dca(),x=dist();return`<div class="grid">${cd("
 <div class="card"><small>Participación vs BTC (base 100)</small><div id="c3" class="ch"></div></div>
 <h3>Comparativa con DCA simple (cada aporte comprado en BTC el día del aporte)</h3><div class="grid">${cd("NAV actual","$ "+f(d&&d.nav))}${cd("DCA de referencia","$ "+f(d&&d.val))}${cd("Diferencia",d?pc(d.nav/d.val-1):"–")}${cd("Coste medio compras bot",x.cm?"$ "+f(x.cm,0):"–")}</div>
 <h3>Días entre operaciones</h3><div class="card">Entre compras: media ${f(x.mb)} d · Entre ventas: media ${f(x.ms)} d · 1ª compra→1ª venta, 2ª→2ª…: ${x.pr.length?x.pr.map(v=>f(v,1)).join(" · ")+" d":"–"}</div>`}
-function accT(){return`<div class="row"><div>${tbl(holders(),["alias","participaciones","%","valor_usd","aportado_neto_usd","rentabilidad_pct"])}</div><div class="card"><div id="c4" class="ch"></div></div></div><p><small>Alias: edita <code>data/accionistas.json</code> (<code>asignaciones</code>: "tx:índice" → alias, tal como sale en <code>data/flujos.csv</code>). Los aportes sin asignar van a <code>alias_por_defecto</code>.</small></p>`}
+function accT(){return`<div class="row"><div>${tbl(holders(),["alias","participaciones","%","valor_usd","aportado_neto_usd","rentabilidad_pct"])}</div><div class="card"><div id="c4" class="ch"></div></div></div>`}
 function chartR(){const cut=rng?Date.now()-rng*864e5:0,d=daily().filter(s=>+s.share_px>0&&+new Date(s.t)>=cut);if(!d.length)return;const b=d[0],c=echarts.init($("#c3"));
 c.setOption({legend:{textStyle:{color:"#8b90ad"}},grid:{left:50,right:15,top:30,bottom:30},tooltip:{trigger:"axis"},xAxis:{type:"category",data:d.map(s=>s.t.slice(0,10))},yAxis:{type:"value",scale:true},
 series:[["Participación","share_px","#9339f4"],["BTC","btc_px","#f5b942"]].map(a=>({name:a[0],type:"line",showSymbol:false,color:a[2],data:d.map(s=>+(s[a[1]]/b[a[1]]*100).toFixed(2))}))});charts=[c]}
