@@ -1,0 +1,10 @@
+signal_date,rule,side,desc,status,cond_met,fired,dist_pct,detail,decision,reason,size_usdc,cooldown_h,cooldown_rest_d,last_exec_utc,last_exec_px_src,min_move,network,dry
+2026-11-26,B1_RSI+FNG,BUY,RSI < 30 y Fear & Greed < 20,activada,True,True,-6.53,RSI 28.03953629676272 (<30) · F&G 11.0 (<20),error,"{'status': 'err', 'response': 'User or API Wallet 0x0bf8174a561a6c2d4efd8c38e9e8994f491cf5f0 does not exist.'}",45.0,24,0.0,,,0.0,mainnet,False
+2026-11-26,B2_RSI,BUY,RSI < 30,no aplica,False,False,-6.53,"RSI 28.03953629676272 (<30, sin B1)",,,,24,0.0,,,0.0,mainnet,False
+2026-11-26,B3_MVRV,BUY,"MVRV < 1,1",vigilar,False,False,3.28,MVRV 1.1360970385009543 (<1.1),,,,240,0.0,,,0.0,mainnet,False
+2026-11-26,B4_EMA200W,BUY,precio < EMA-200W,activada,True,True,-13.08,cierre 60499.2 vs EMA-200W 69605.76094757537,error,"{'status': 'err', 'response': 'User or API Wallet 0x0bf8174a561a6c2d4efd8c38e9e8994f491cf5f0 does not exist.'}",31.5,240,0.0,,,0.0,mainnet,False
+2026-11-26,B5_SIN_COMPRAS,BUY,≥ 30 días sin operar y caída diaria ≥ 2 %,no cumplida,False,False,110.02,1.0 d sin operar (≥30) · ret1d 0.2 % (≤-2%),,,,0,0.0,,,0.0,mainnet,False
+2026-11-26,B6_CAIDA_ULT_COMPRA,BUY,≥ 15 días sin operar y precio ≥ 10 % por debajo de la última compra,no cumplida,False,False,,sin compras previas,,,,0,0.0,,,0.0,mainnet,False
+2026-11-26,S1_FNG,SELL,Fear & Greed > 80,no cumplida,False,False,86.25,F&G 11.0 (>80),,,,24,0.0,,,0.02,mainnet,False
+2026-11-26,S3_MVRV,SELL,"MVRV > 2,4",no cumplida,False,False,52.66,MVRV 1.1360970385009543 (>2.4),,,,336,0.0,,,0.02,mainnet,False
+2026-11-26,S4_EMA200W,SELL,precio > 2 × EMA-200W,no cumplida,False,False,56.54,cierre 60499.2 vs 2.0×EMA-200W 139212,,,,336,0.0,,,0.02,mainnet,False

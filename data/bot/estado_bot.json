@@ -1,0 +1,57 @@
+{
+ "network": "mainnet",
+ "pair": "@142",
+ "base": "UBTC",
+ "start_date": "2026-11-26",
+ "last_cycle": {
+  "signal_date": "2026-11-26",
+  "run_utc": "2026-11-27T01:22:00+00:00",
+  "cron_delay_min": 75.0,
+  "n_orders": 2,
+  "decisions": {
+   "error": 2
+  },
+  "dry": false,
+  "warnings": [
+   "B1_RSI+FNG: orden NO ejecutada ({'status': 'err', 'response': 'User or API Wallet 0x0bf8174a561a6c2d4efd8c38e9e8994f491cf5f0 does not exist.'}). No se reintenta automáticamente: esa compra/venta de hoy se pierde.",
+   "B4_EMA200W: orden NO ejecutada ({'status': 'err', 'response': 'User or API Wallet 0x0bf8174a561a6c2d4efd8c38e9e8994f491cf5f0 does not exist.'}). No se reintenta automáticamente: esa compra/venta de hoy se pierde."
+  ],
+  "ok": false
+ },
+ "balances": {
+  "usdc_free": 109.8,
+  "base_free": 0.0,
+  "mid": 60694.5
+ },
+ "days_since_trade": 1.0,
+ "last_trade_utc": "2026-11-26 00:00:00",
+ "last_buy_px_src": null,
+ "open_orders": 0,
+ "indicators": {
+  "RSI-14": {
+   "valor": 28.03953629676272,
+   "estado": "Compra",
+   "reglas": "B1,B2"
+  },
+  "Fear & Greed": {
+   "valor": 11.0,
+   "estado": "Compra",
+   "reglas": "B1,S1"
+  },
+  "MVRV": {
+   "valor": 1.1360970385009543,
+   "estado": "Vigilar",
+   "reglas": "B3,S3"
+  },
+  "Cierre / EMA-200W": {
+   "valor": 0.8691694362132738,
+   "estado": "Compra",
+   "reglas": "B4,S4"
+  }
+ },
+ "last_error": null,
+ "schema": 1,
+ "updated_utc": "2026-11-27T12:58:17+00:00",
+ "last_fills_check_utc": "2026-11-27T12:58:17+00:00",
+ "last_fills_new": 0
+}
