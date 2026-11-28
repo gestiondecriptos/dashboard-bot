@@ -8,3 +8,12 @@ signal_date,rule,side,desc,status,cond_met,fired,dist_pct,detail,decision,reason
 2026-11-26,S1_FNG,SELL,Fear & Greed > 80,no cumplida,False,False,86.25,F&G 11.0 (>80),,,,24,0.0,,,0.02,mainnet,False
 2026-11-26,S3_MVRV,SELL,"MVRV > 2,4",no cumplida,False,False,52.66,MVRV 1.1360970385009543 (>2.4),,,,336,0.0,,,0.02,mainnet,False
 2026-11-26,S4_EMA200W,SELL,precio > 2 × EMA-200W,no cumplida,False,False,56.54,cierre 60499.2 vs 2.0×EMA-200W 139212,,,,336,0.0,,,0.02,mainnet,False
+2026-11-27,B1_RSI+FNG,BUY,RSI < 30 y Fear & Greed < 20,activada,True,True,-10.2,RSI 26.940102210494203 (<30) · F&G 12.0 (<20),filled,,45.0,24,0.0,2026-11-27 23:59:59,60700.0,0.0,mainnet,False
+2026-11-27,B2_RSI,BUY,RSI < 30,no aplica,False,False,-10.2,"RSI 26.940102210494203 (<30, sin B1)",,,,24,0.0,,,0.0,mainnet,False
+2026-11-27,B3_MVRV,BUY,"MVRV < 1,1",vigilar,False,False,3.56,MVRV 1.1391995277471378 (<1.1),,,,240,0.0,,,0.0,mainnet,False
+2026-11-27,B4_EMA200W,BUY,precio < EMA-200W,activada,True,True,-14.0,cierre 59863.7 vs EMA-200W 69605.76094757537,nobal,"saldo USDC insuficiente (hay 20.32, hace falta 31.45)",31.5,240,0.0,,,0.0,mainnet,False
+2026-11-27,B5_SIN_COMPRAS,BUY,≥ 30 días sin operar y caída diaria ≥ 2 %,no cumplida,False,False,100.0,0.0 d sin operar (≥30) · ret1d -1.04 % (≤-2%),,,,0,0.0,,,0.0,mainnet,False
+2026-11-27,B6_CAIDA_ULT_COMPRA,BUY,≥ 15 días sin operar y precio ≥ 10 % por debajo de la última compra,no cumplida,False,False,100.0,"0.0 d sin operar (≥15) · cierre 59863.7 vs umbral 54,633",,,,0,0.0,,,0.0,mainnet,False
+2026-11-27,S1_FNG,SELL,Fear & Greed > 80,no cumplida,False,False,85.0,F&G 12.0 (>80),,,,24,0.0,,,0.02,mainnet,False
+2026-11-27,S3_MVRV,SELL,"MVRV > 2,4",no cumplida,False,False,52.53,MVRV 1.1391995277471378 (>2.4),,,,336,0.0,,,0.02,mainnet,False
+2026-11-27,S4_EMA200W,SELL,precio > 2 × EMA-200W,no cumplida,False,False,57.0,cierre 59863.7 vs 2.0×EMA-200W 139212,,,,336,0.0,,,0.02,mainnet,False
