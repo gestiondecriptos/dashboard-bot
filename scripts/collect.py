@@ -1,6 +1,6 @@
 """Recoge datos de SOLO LECTURA (sin claves): W3 (API pública de Hyperliquid), W2 (Arbitrum: USDC + Aave v3 por RPC público),
 aportes/retiradas USDC entre W1 y W2 (→ participaciones) y copia del estado del bot (repo privado, token de solo lectura)."""
-import os, csv, json, math, datetime as dt
+import os, re, csv, json, math, datetime as dt
 import requests
 
 HL = "https://api.hyperliquid.xyz/info"
@@ -12,6 +12,7 @@ E = lambda k: (os.environ.get(k) or "").strip()
 W1, W2, W3, BOT_REPO, TOKEN = E("W1_ADDRESS"), E("W2_ADDRESS"), E("W3_ADDRESS"), E("BOT_REPO"), E("BOT_TOKEN")
 STATE_DIR = E("STATE_DIR") or "state/mainnet"      # carpeta del estado del bot en su repo
 FILES = ["estado_bot.json", "historial_operaciones.csv", "historial_fills.csv", "historial_reglas.csv", "indicadores_diarios.csv"]
+ADDR = re.compile(rb"0x[0-9a-fA-F]{40}(?![0-9a-fA-F])")   # el repo es público: se ocultan direcciones en lo que se copia del bot
 os.makedirs("data/bot", exist_ok=True)
 
 
@@ -32,7 +33,7 @@ call = lambda to, data: rpc("eth_call", [{"to": to, "data": data}, "latest"])
 TOK = {"USDC": (USDC, 6), "USDT": ("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", 6), "WBTC": ("0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", 8)}
 ZERO = "0x" + "0" * 40
 FLOW_COLS = ["t", "tx", "tipo", "usdc", "precio_participacion", "participaciones", "participaciones_total", "token", "cantidad"]
-SNAP_COLS = ["t", "btc_px", "w2_usd", "w3_usd", "w4_usd", "debt_usd", "nav_usd", "shares", "share_px", "btc_total", "usdc_total"]
+SNAP_COLS = ["t", "btc_px", "w2_usd", "w3_usd", "w4_usd", "debt_usd", "nav_usd", "shares", "share_px", "btc_total", "usdc_total", "w3_arb_usd"]
 
 
 def bal(tok, a):
@@ -104,7 +105,7 @@ def copy_bot_state():
     st = json.loads(got["estado_bot.json"]) if "estado_bot.json" in got else {}
     if st.get("network") != "mainnet" and E("ALLOW_TESTNET") != "1":
         print("El bot está en testnet: NO se publica (ALLOW_TESTNET=1 solo para pruebas)."); return
-    for f, c in got.items(): open(f"data/bot/{f}", "wb").write(c)
+    for f, c in got.items(): open(f"data/bot/{f}", "wb").write(ADDR.sub(b"0x(oculta)", c))
 
 
 def snapshot():
@@ -127,7 +128,10 @@ def snapshot():
         fo["ultimo_bloque"] = latest
     w2 = None if w2_usdc is None else w2_usdc + w2_btc * btc
     w3 = w3_usdc + w3_btc * btc
-    nav = w3 + (w2 or 0)
+    wa = {x: bal(t, W3) / 10 ** d for x, (t, d) in TOK.items()}       # W3 en Arbitrum (fuera de Hyperliquid): saldos libres USDC/USDT/WBTC
+    wa_usdc, wa_btc = wa["USDC"] + wa["USDT"] * k, wa["WBTC"]
+    w3_arb = wa_usdc + wa_btc * btc
+    nav = w3 + w3_arb + (w2 or 0)
     sh = fo["participaciones"]
     if new_ev:                                                        # precio = NAV antes del flujo / participaciones (o precio inicial)
         px = (nav - sum(e["usdc"] for e in new_ev)) / sh if sh > 0 else fo["precio_inicial"]
@@ -144,7 +148,7 @@ def snapshot():
     r = lambda v, d=2: "" if v is None else round(v, d)
     row = {"t": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(), "btc_px": btc, "w2_usd": r(w2), "w3_usd": r(w3), "w4_usd": "",
            "debt_usd": r(debt), "nav_usd": r(nav), "shares": sh, "share_px": round(nav / sh, 6) if sh > 0 else fo["precio_inicial"],
-           "btc_total": round(w3_btc + (w2_btc or 0), 8), "usdc_total": round(w3_usdc + (w2_usdc or 0), 2)}
+           "btc_total": round(w3_btc + wa_btc + (w2_btc or 0), 8), "usdc_total": round(w3_usdc + wa_usdc + (w2_usdc or 0), 2), "w3_arb_usd": r(w3_arb)}
     ensure("data/snapshots.csv", SNAP_COLS)
     with open("data/snapshots.csv", "a", newline="") as fh: csv.DictWriter(fh, SNAP_COLS).writerow(row)
     json.dump(fo, open("data/fondo.json", "w"), indent=1)
