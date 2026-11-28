@@ -40,6 +40,52 @@ def bal(tok, a):
     return int(call(tok, "0x70a08231" + pad(a)), 16)
 
 
+def arb_detail(a):
+    """Por token (USDC, USDT, WBTC) en una wallet de Arbitrum: libre, colateral (aToken de Aave) y deuda (variable + estable), en unidades del token."""
+    d = {}
+    for s, (t, dec) in TOK.items():
+        w = call(POOL, "0x35ea6a75" + pad(t))[2:]
+        at, st, va = ("0x" + w[i * 64:(i + 1) * 64][-40:] for i in (8, 9, 10))
+        d[s] = {"libre": bal(t, a) / 10 ** dec, "colateral": bal(at, a) / 10 ** dec,
+                "deuda": sum(bal(x, a) for x in (st, va) if x != ZERO) / 10 ** dec}
+    return d
+
+
+def arb_wallet(a, btc, k):
+    """Cartera en Arbitrum en USD: USDC (USDC+USDT libres), BTC (WBTC libre), colateral (Aave), deuda. neto = suma - deuda."""
+    d, pr = arb_detail(a), {"USDC": 1.0, "USDT": k, "WBTC": btc}
+    usdc = sum(d[x]["libre"] * pr[x] for x in ("USDC", "USDT")); b = d["WBTC"]["libre"] * btc
+    col = sum(d[x]["colateral"] * pr[x] for x in d); deb = sum(d[x]["deuda"] * pr[x] for x in d)
+    net = lambda x: d[x]["libre"] + d[x]["colateral"] - d[x]["deuda"]
+    return {"usdc": usdc, "btc": b, "colateral": col, "deuda": deb, "neto": usdc + b + col - deb,
+            "usdc_u": net("USDC") + net("USDT") * k, "btc_u": net("WBTC")}
+
+
+def hl_wallet(user, btc, k):
+    """W3 en Hyperliquid: spot + margen perp + préstamos (borrowLend: suministrado = colateral, prestado = deuda).
+    En cuenta unificada / portfolio margin el saldo vive en spot y el perp NO se suma (sería contar doble)."""
+    mode = hl({"type": "userAbstraction", "user": user})
+    mode = mode if isinstance(mode, str) else json.dumps(mode)
+    spot = {b["coin"]: float(b["total"]) for b in hl({"type": "spotClearinghouseState", "user": user}).get("balances", [])}
+    perp = 0.0 if mode in ("unifiedAccount", "portfolioMargin") else float(hl({"type": "clearinghouseState", "user": user})["marginSummary"]["accountValue"])
+    bl = hl({"type": "borrowLendUserState", "user": user})
+    print("HL modo:", mode, "| borrowLend:", json.dumps(bl))
+    names = {t["index"]: t["name"] for t in hl({"type": "spotMeta"})["tokens"]}
+    pr = {"USDC": 1.0, "USDT0": k, "UBTC": btc}
+    sup, bor = dict.fromkeys(pr, 0.0), dict.fromkeys(pr, 0.0)
+    for idx, st in bl.get("tokenToState", []):
+        n = names.get(idx)
+        if n not in pr: raise RuntimeError(f"borrowLend con un token sin valorar: {n or idx}")   # no se publica un NAV incompleto
+        sup[n] += float(st["supply"]["value"]); bor[n] += float(st["borrow"]["value"])
+    otros = sorted(c for c, v in spot.items() if v and c not in pr)
+    if otros: print("AVISO: saldos spot en Hyperliquid sin valorar:", otros)
+    usdc, ub = spot.get("USDC", 0) + spot.get("USDT0", 0) * k, spot.get("UBTC", 0)
+    col = perp + sum(sup[n] * pr[n] for n in pr); deb = sum(bor[n] * pr[n] for n in pr)
+    return {"usdc": usdc, "btc": ub * btc, "colateral": col, "deuda": deb, "neto": usdc + ub * btc + col - deb,
+            "usdc_u": usdc + perp + (sup["USDC"] - bor["USDC"]) + (sup["USDT0"] - bor["USDT0"]) * k, "btc_u": ub + sup["UBTC"] - bor["UBTC"],
+            "mode": mode, "avisos": ["Saldos sin valorar: " + ", ".join(otros)] if otros else []}
+
+
 def w2_assets(a):
     """Por activo (USDC, USDT, WBTC): neto = libre + aToken − deuda (variable y estable), y deuda; en unidades del token."""
     net, debt = {}, {}
@@ -111,15 +157,12 @@ def copy_bot_state():
 def snapshot():
     if not W3: print("Falta el secret W3_ADDRESS"); return
     btc = float(hl({"type": "allMids"})["BTC"])
-    b3 = {b["coin"]: float(b["total"]) for b in hl({"type": "spotClearinghouseState", "user": W3}).get("balances", [])}
-    w3_usdc = b3.get("USDC", 0) + float(hl({"type": "clearinghouseState", "user": W3})["marginSummary"]["accountValue"])
-    w3_btc = b3.get("UBTC", 0)
-    k = usdt_usdc(); pr = {"USDC": 1.0, "USDT": k, "WBTC": btc}      # USDT se cuenta como USDC; WBTC como BTC
+    k = usdt_usdc(); pr = {"USDC": 1.0, "USDT": k, "WBTC": btc}
+    H, A, B = hl_wallet(W3, btc, k), arb_wallet(W3, btc, k), None      # USDT se cuenta como USDC; WBTC como BTC
     w2_usdc = w2_btc = debt = None; new_ev = []; fo = json.load(open("data/fondo.json"))
     if W1 and W2:                                                     # si W2 falla, el workflow falla: no se publica un NAV incompleto
-        net, dbt = w2_assets(W2)
-        w2_usdc, w2_btc = net["USDC"] + net["USDT"] * k, net["WBTC"]
-        debt = dbt["USDC"] + dbt["USDT"] * k + dbt["WBTC"] * btc
+        B = arb_wallet(W2, btc, k)
+        w2_usdc, w2_btc, debt = B["usdc_u"], B["btc_u"], B["deuda"]
         latest = int(rpc("eth_blockNumber", []), 16)
         start = (fo["ultimo_bloque"] + 1) if fo.get("ultimo_bloque") else block_at(int(dt.datetime.fromisoformat(fo["inicio"]).timestamp()), latest)
         done = {r["tx"] for r in csv.DictReader(open("data/flujos.csv"))} if os.path.exists("data/flujos.csv") else set()
@@ -127,10 +170,7 @@ def snapshot():
         for e in new_ev: e["usdc"] = e["amt"] * pr[e["tok"]]
         fo["ultimo_bloque"] = latest
     w2 = None if w2_usdc is None else w2_usdc + w2_btc * btc
-    w3 = w3_usdc + w3_btc * btc
-    wa = {x: bal(t, W3) / 10 ** d for x, (t, d) in TOK.items()}       # W3 en Arbitrum (fuera de Hyperliquid): saldos libres USDC/USDT/WBTC
-    wa_usdc, wa_btc = wa["USDC"] + wa["USDT"] * k, wa["WBTC"]
-    w3_arb = wa_usdc + wa_btc * btc
+    w3, w3_arb = H["neto"], A["neto"]                                 # W3 = Hyperliquid + Arbitrum, separadas
     nav = w3 + w3_arb + (w2 or 0)
     sh = fo["participaciones"]
     if new_ev:                                                        # precio = NAV antes del flujo / participaciones (o precio inicial)
@@ -147,10 +187,13 @@ def snapshot():
         fo["participaciones"] = sh
     r = lambda v, d=2: "" if v is None else round(v, d)
     row = {"t": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(), "btc_px": btc, "w2_usd": r(w2), "w3_usd": r(w3), "w4_usd": "",
-           "debt_usd": r(debt), "nav_usd": r(nav), "shares": sh, "share_px": round(nav / sh, 6) if sh > 0 else fo["precio_inicial"],
-           "btc_total": round(w3_btc + wa_btc + (w2_btc or 0), 8), "usdc_total": round(w3_usdc + wa_usdc + (w2_usdc or 0), 2), "w3_arb_usd": r(w3_arb)}
+           "debt_usd": r((debt or 0) + H["deuda"] + A["deuda"]), "nav_usd": r(nav), "shares": sh, "share_px": round(nav / sh, 6) if sh > 0 else fo["precio_inicial"],
+           "btc_total": round(H["btc_u"] + A["btc_u"] + (w2_btc or 0), 8), "usdc_total": round(H["usdc_u"] + A["usdc_u"] + (w2_usdc or 0), 2), "w3_arb_usd": r(w3_arb)}
     ensure("data/snapshots.csv", SNAP_COLS)
     with open("data/snapshots.csv", "a", newline="") as fh: csv.DictWriter(fh, SNAP_COLS).writerow(row)
+    pub = lambda x: None if x is None else {q: round(x[q], 2) for q in ("usdc", "btc", "colateral", "deuda", "neto")}
+    json.dump({"t": row["t"], "carteras": {"W2 Arbitrum": pub(B), "W3 Arbitrum": pub(A), "W3 Hyperliquid": pub(H), "W4 Bitcoin": None},
+               "hl_modo": H["mode"], "avisos": H["avisos"]}, open("data/carteras.json", "w"), indent=1, ensure_ascii=False)
     json.dump(fo, open("data/fondo.json", "w"), indent=1)
     print(row, f"· {len(new_ev)} flujos nuevos")
 
