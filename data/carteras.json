@@ -1,0 +1,29 @@
+{
+ "t": "2026-11-28T16:24:50+00:00",
+ "carteras": {
+  "W2 Arbitrum": {
+   "usdc": 4.67,
+   "btc": 0.0,
+   "colateral": 0.0,
+   "deuda": 0.0,
+   "neto": 4.67
+  },
+  "W3 Arbitrum": {
+   "usdc": 35.25,
+   "btc": 0.0,
+   "colateral": 0.0,
+   "deuda": 0.0,
+   "neto": 35.25
+  },
+  "W3 Hyperliquid": {
+   "usdc": 40.45,
+   "btc": 0.0,
+   "colateral": 87.84,
+   "deuda": 20.0,
+   "neto": 108.3
+  },
+  "W4 Bitcoin": null
+ },
+ "hl_modo": "unifiedAccount",
+ "avisos": []
+}
